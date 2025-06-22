@@ -1,0 +1,153 @@
+blueprint:
+  name: Verschlusssteuerung
+  description: "Steuert Schließzeiten unter Berücksichtigung von Sonnenstand und Zeitfenstern"
+  domain: automation
+  input:
+    early_open:
+      name: "Früheste Öffnungszeit"
+      description: "Die Uhrzeit, zu der frühestens geöffnet wird"
+      default: "06:45:00"
+      selector:
+        time:
+    late_open:
+      name: "Späteste Öffnungszeit"
+      description: "Die Uhrzeit, zu der spätestens geöffnet wird"
+      default: "09:00:00"
+      selector:
+        time:
+    early_close:
+      name: "Früheste Schließzeit"
+      description: "Die Uhrzeit, zu der frühestens geschlossen wird"
+      default: "19:30:00"
+      selector:
+        time:
+    late_close:
+      name: "Späteste Schließzeit"
+      description: "Die Uhrzeit, zu der spätestens geschlossen wird"
+      default: "21:30:00"
+      selector:
+        time:
+    elevation_open:
+      name: "Sonnenstand zum Öffnen"
+      description: "Der Sonnenstand, zu dem geöffnet wird"
+      default: 0
+      selector:
+        number:
+          min: -90
+          max: 90
+          unit_of_measurement: "°"
+          step: 1
+          mode: slider
+    elevation_close:
+      name: "Sonnenstand zum Schließen"
+      description: "Der Sonnenstand, zu dem geschlossen wird"
+      default: 0
+      selector:
+        number:
+          min: -90
+          max: 90
+          unit_of_measurement: "°"
+          step: 1
+          mode: slider
+    target_helper:
+      name: "Zielvariable"
+      description: "Der Helfer-Schalter, der geöffnet oder geschlossen wird"
+      selector:
+        target:
+          entity:
+            - domain: input_boolean
+    run_condition:
+      name: "Ausführungsbedingung"
+      description: "Eine Bedingung, die erfüllt sein muss, damit die Automation aktiv wird"
+      selector:
+        condition:
+
+triggers:
+  - trigger: time
+    at: !input early_open
+    id: Früheste Öffnungszeit
+  - trigger: numeric_state
+    entity_id:
+      - sun.sun
+    attribute: elevation
+    above: !input elevation_open
+    id: Sonnenaufgang
+  - trigger: time
+    at: !input late_open
+    id: Späteste Öffnungszeit
+  - trigger: time
+    at: !input early_close
+    id: Früheste Schließzeit
+  - trigger: numeric_state
+    entity_id:
+      - sun.sun
+    attribute: elevation
+    id: Sonnenuntergang
+    below: !input elevation_close
+  - trigger: time
+    at: !input late_close
+    id: Späteste Schließzeit
+variables:
+  target_helper: !input target_helper
+conditions:
+  - condition: !input run_condition
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_state(target_helper.entity_id, 'on') }}"
+          - condition: or
+            conditions:
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id:
+                      - Sonnenaufgang
+                  - condition: time
+                    after: !input early_open
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id:
+                      - Früheste Öffnungszeit
+                  - condition: numeric_state
+                    entity_id: sun.sun
+                    attribute: elevation
+                    above: !input elevation_open
+              - condition: trigger
+                id:
+                  - Späteste Öffnungszeit
+        sequence:
+          - action: input_boolean.turn_off
+            metadata: {}
+            data: {}
+            target: !input target_helper
+      - conditions:
+          - condition: template
+            value_template: "{{ is_state(target_helper.entity_id, 'off') }}"
+          - condition: or
+            conditions:
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id:
+                      - Sonnenuntergang
+                  - condition: time
+                    after: !input early_close
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id:
+                      - Früheste Schließzeit
+                  - condition: numeric_state
+                    entity_id: sun.sun
+                    below: !input elevation_close
+              - condition: trigger
+                id:
+                  - Späteste Schließzeit
+        sequence:
+          - action: input_boolean.turn_on
+            metadata: {}
+            data: {}
+            target: !input target_helper
+mode: single

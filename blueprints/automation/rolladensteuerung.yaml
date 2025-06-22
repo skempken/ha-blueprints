@@ -1,0 +1,183 @@
+blueprint:
+  name: Rolladensteuerung mit Sonnenschutz und Kontaktsensor
+  description: "Steuert einen Rolladen unter Berücksichtigung von Sonnenschutz und einem Kontaktsensor"
+  domain: automation
+  input:
+    target_cover:
+      name: Rolladen
+      description: "Der zu steuernde Rolladen"
+      selector:
+        target:
+          entity:
+            - domain: cover
+    nighttime:
+      name: Nachtsensor
+      description: "Dieser Sensor gibt an, ob der Rolladen für die Nacht geschlossen werden soll"
+      selector:
+        entity:
+          filter:
+            - domain:
+                - binary_sensor
+                - input_boolean
+    protection:
+      name: Sonnenschutz
+      description: "Dieser Sensor gibt an, ob der Rolladen für Sonnenschutz teilgeschlossen werden soll"
+      selector:
+        entity:
+          filter:
+            - domain:
+                - binary_sensor
+                - input_boolean
+    protection_position:
+      name: Sonnenschutzposition
+      description: "Dieser Sensor gibt an, auf welcher Position der Rolladen für den Sonnenschutz teilgeschlossen werden soll"
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+          step: 5
+          mode: slider
+    contact_sensor:
+      name: Kontaktsensor
+      description: "Dieser Sensor gibt an, ob das Fenster zum zu steuernden Rolladen gerade geöffnet ist"
+      selector:
+        entity:
+          filter:
+            - domain:
+                - binary_sensor
+                - input_boolean
+
+alias: Arbeitszimmer Rolladen Balkontür Automatik
+description: ""
+triggers:
+  - trigger: state
+    entity_id: !input nighttime
+    to: "on"
+    id: Rolladen für die Nacht schließen
+    from: "off"
+  - trigger: state
+    entity_id: !input nighttime
+    to: "off"
+    id: Rolladen für den Tag öffnen
+    from: "on"
+  - trigger: state
+    entity_id: !input protection
+    from: "off"
+    to: "on"
+    id: Sonnenschutz aktivieren
+  - trigger: state
+    entity_id: !input protection
+    from: "on"
+    to: "off"
+    id: Sonnenschutz deaktivieren
+  - trigger: state
+    entity_id: !input contact_sensor
+    to: "on"
+    id: Fenster geöffnet
+  - trigger: state
+    entity_id: !input contact_sensor
+    to: "off"
+    id: Fenster geschlossen
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - Rolladen für den Tag öffnen
+              - Fenster geschlossen
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input protection
+                state: "on"
+            then:
+              - action: cover.set_cover_position
+                metadata: {}
+                data:
+                  position: !input protection_position
+                target: !input target_cover
+            else:
+              - action: cover.open_cover
+                metadata: {}
+                data: {}
+                target: !input target_cover
+      - conditions:
+          - condition: trigger
+            id:
+              - Rolladen für die Nacht schließen
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input contact_sensor
+                state: "off"
+            then:
+              - action: cover.close_cover
+                metadata: {}
+                data: {}
+                target: !input target_cover
+      - conditions:
+          - condition: trigger
+            id:
+              - Sonnenschutz aktivieren
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input nighttime
+                state: "off"
+              - condition: state
+                entity_id: !input contact_sensor
+                state: "off"
+            then:
+              - action: cover.set_cover_position
+                metadata: {}
+                data:
+                  position: !input protection_position
+                target: !input target_cover
+      - conditions:
+          - condition: trigger
+            id:
+              - Sonnenschutz deaktivieren
+        sequence:
+          - action: cover.open_cover
+            metadata: {}
+            data: {}
+            target: !input target_cover
+      - conditions:
+          - condition: trigger
+            id:
+              - Fenster geöffnet
+        sequence:
+          - action: cover.open_cover
+            metadata: {}
+            data: {}
+            target: !input target_cover
+    default:
+      - if:
+          - condition: state
+            entity_id: !input nighttime
+            state: "off"
+        then:
+          - if:
+              - condition: state
+                entity_id: !input protection
+                state: "on"
+            then:
+              - action: cover.set_cover_position
+                metadata: {}
+                data:
+                  position: !input protection_position
+                target: !input target_cover
+            else:
+              - action: cover.open_cover
+                metadata: {}
+                data: {}
+                target: !input target_cover
+        else:
+          - action: cover.close_cover
+            metadata: {}
+            data: {}
+            target: !input target_cover
+mode: single
